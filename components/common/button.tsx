@@ -1,12 +1,13 @@
 export interface IMyButton{
-btncls:'primary' | 'secondary' | 'danger';
+type:"submit" | "reset" | "button";
+btncls:string;
 children:string;
-handleClick:() => void
+handleClick?:() => void
 }
 
 
-export default function MyButton({btncls,children,handleClick}:IMyButton){
+export default function MyButton({btncls,children,handleClick,type}:IMyButton){
     return(
-        <button onClick={handleClick} className={btncls}>{children}</button>
+        <button type={type} onClick={handleClick} className={btncls}>{children}</button>
     )
 }
