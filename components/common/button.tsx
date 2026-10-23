@@ -1,8 +1,9 @@
 export interface IMyButton{
 type:"submit" | "reset" | "button";
 btncls:string;
-children:string;
-handleClick?:() => void
+children:any;
+handleClick?:(e:any) => void
+disabled?:Boolean
 }
 
 

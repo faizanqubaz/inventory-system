@@ -1,64 +1,50 @@
-import { MongooseCache } from "@/types/global-cache.type";
-import dotenv from 'dotenv'
-dotenv.config()
+
 import mongoose from "mongoose";
+import type { MongooseCache } from "@/types/global-cache.type";
 
-const MONGODB_URI:any = process.env.MONGODB_URI;
-
-console.log("MongoDB URL:", MONGODB_URI ? "FOUND" : "NOT FOUND");
+const MONGODB_URI:any = process.env.MONGODB_URI || null;
 
 if (!MONGODB_URI) {
-  throw new Error("MONGODB_URI is not defined");
+  throw new Error("MONGODB_URI is not defined in .env.local");
 }
-
-
 
 declare global {
   // eslint-disable-next-line no-var
   var mongoose: MongooseCache | undefined;
 }
 
-const cached: MongooseCache = global.mongoose || {
+const cached = (global.mongoose ??= {
   conn: null,
   promise: null,
-};
-
-global.mongoose = cached;
+});
 
 export async function connectDB() {
+  if (cached.conn && mongoose.connection.readyState === 1) {
+    console.log("MongoDB: Already connected");
+    return cached.conn;
+  }
+
+  if (!cached.promise) {
+    console.log("MongoDB: Connecting...");
+
+    cached.promise = mongoose.connect(MONGODB_URI, {
+      bufferCommands: false,
+      serverSelectionTimeoutMS: 10000,
+      connectTimeoutMS: 10000,
+    });
+  }
+
   try {
-    // Already connected
-    if (cached.conn) {
-      console.log("✅ MongoDB: Already connected");
-      return cached.conn;
-    }
-
-    // Connection is already being established
-    if (!cached.promise) {
-      console.log("🔄 MongoDB: Connecting to database...");
-
-      cached.promise = mongoose.connect(MONGODB_URI, {
-        bufferCommands: false,
-      });
-    }
-
-    // Wait for connection
     cached.conn = await cached.promise;
 
-    console.log("✅ MongoDB: Connection established successfully");
-    console.log("📦 Database:", mongoose.connection.name);
-    console.log("🌐 Host:", mongoose.connection.host);
+    console.log("MongoDB connected:", mongoose.connection.name);
 
     return cached.conn;
   } catch (error) {
-    console.error("❌ MongoDB: Connection rejected/failed");
-    console.error(error);
-
-    // Reset promise so the next request can retry
     cached.promise = null;
     cached.conn = null;
 
-    // IMPORTANT: don't swallow the error
+    console.error("MongoDB connection failed:", error);
     throw error;
   }
 }
