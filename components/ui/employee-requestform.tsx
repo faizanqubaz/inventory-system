@@ -58,9 +58,9 @@ const inputCls =
 
 export default function EmployeeRequestForm() {
   const dispatch = useAppDispatch();
-const user = useAppSelector((state:any) => state.auth.user);
+  const user = useAppSelector((state: any) => state.auth.user);
 
-console.log("Logged-in employee:", user);
+  console.log("Logged-in employee:", user);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -146,42 +146,42 @@ console.log("Logged-in employee:", user);
   };
 
   // Submit purchase request
- const onSubmit = async (
-  e: React.FormEvent<HTMLFormElement>
-) => {
-  e.preventDefault();
+  const onSubmit = async (
+    e: React.FormEvent<HTMLFormElement>
+  ) => {
+    e.preventDefault();
 
-  if (loading) return;
+    if (loading) return;
 
-  if (!user?.id) {
-    setError("Please log in before submitting a request.");
-    return;
-  }
+    if (!user?.id) {
+      setError("Please log in before submitting a request.");
+      return;
+    }
 
-  setLoading(true);
-  setError("");
+    setLoading(true);
+    setError("");
 
-  try {
-    await dispatch(
-      createPurchaseRequest({
-        ...form,
-        receipt,
-        employeeId: user.id,
-      })
-    ).unwrap();
+    try {
+      await dispatch(
+        createPurchaseRequest({
+          ...form,
+          receipt,
+          employeeId: user.id,
+        })
+      ).unwrap();
 
-    clearForm();
-    setShowSuccessModal(true);
-  } catch (err: unknown) {
-    setError(
-      typeof err === "string"
-        ? err
-        : "Failed to submit purchase request. Please try again."
-    );
-  } finally {
-    setLoading(false);
-  }
-};
+      clearForm();
+      setShowSuccessModal(true);
+    } catch (err: unknown) {
+      setError(
+        typeof err === "string"
+          ? err
+          : "Failed to submit purchase request. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
   return (
     <>
       <section className="mx-auto mb-8 w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">

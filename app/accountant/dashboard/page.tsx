@@ -1,1198 +1,907 @@
-
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import {
-  LayoutDashboard,
-  ClipboardCheck,
-  Wallet,
-  ShoppingCart,
-  ChartNoAxesCombined,
-  Download,
-  Settings,
-  Bell,
-  Search,
-  Menu,
-  X,
+  Banknote,
   CheckCircle2,
   Clock3,
-  CircleDollarSign,
-  TrendingUp,
-  Eye,
-  Check,
-  Plus,
-  CalendarDays,
-  FileSpreadsheet,
-  ReceiptText,
   CreditCard,
-  ArrowUpRight,
+  FileText,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  RefreshCw,
+  Search,
+  Settings,
+  Wallet,
+  X,
+  Eye,
+  Users,
+  ChevronRight,
+  Loader2,
 } from "lucide-react";
 
-type RequestStatus = "Paid" | "Unpaid";
+type PaymentStatus = "Paid" | "Unpaid";
+type PaymentFilter = "All" | "Paid" | "Unpaid";
 
 interface PurchaseRequest {
   id: string;
   employee: string;
   department: string;
   item: string;
-  amount: number;
-  date: string;
-  status: RequestStatus;
-}
-
-interface DirectPurchase {
-  id: string;
-  item: string;
   category: string;
+  quantity: number;
   amount: number;
   date: string;
-  paymentStatus: RequestStatus;
   description: string;
+  receipt: string;
+  status: PaymentStatus;
 }
 
-const initialRequests: PurchaseRequest[] = [
-  {
-    id: "PR-1024",
-    employee: "Ali Ahmed",
-    department: "IT",
-    item: "Office supplies",
-    amount: 12500,
-    date: "2026-10-22",
-    status: "Unpaid",
-  },
-  {
-    id: "PR-1023",
-    employee: "Sara Khan",
-    department: "HR",
-    item: "Travel expenses",
-    amount: 8000,
-    date: "2026-10-21",
-    status: "Paid",
-  },
-  {
-    id: "PR-1022",
-    employee: "Usman Ali",
-    department: "IT",
-    item: "Computer accessories",
-    amount: 24000,
-    date: "2026-10-20",
-    status: "Unpaid",
-  },
-  {
-    id: "PR-1021",
-    employee: "Ayesha Noor",
-    department: "Finance",
-    item: "Printer maintenance",
-    amount: 6500,
-    date: "2026-10-19",
-    status: "Paid",
-  },
-  {
-    id: "PR-1020",
-    employee: "Hamza Khan",
-    department: "Procurement",
-    item: "Stationery",
-    amount: 4500,
-    date: "2026-10-18",
-    status: "Unpaid",
-  },
-];
+interface ApiPurchaseRequest {
+  id?: string;
+  _id?: string;
+  employee?: string;
+  department?: string;
+  item?: string;
+  category?: string;
+  quantity?: number;
+  amount?: number;
+  date?: string;
+  description?: string;
+  receipt?: string;
+  paymentStatus?: string;
+}
 
-const initialDirectPurchases: DirectPurchase[] = [
-  {
-    id: "DP-001",
-    item: "Office refreshments",
-    category: "Food",
-    amount: 3500,
-    date: "2026-10-22",
-    paymentStatus: "Paid",
-    description: "Refreshments for the office",
-  },
-  {
-    id: "DP-002",
-    item: "Emergency stationery",
-    category: "Office Supplies",
-    amount: 2200,
-    date: "2026-10-21",
-    paymentStatus: "Unpaid",
-    description: "Direct office purchase",
-  },
-];
+interface ApiResponse {
+  success: boolean;
+  message?: string;
+  requests?: ApiPurchaseRequest[];
+}
 
 const navigation = [
-  { label: "Dashboard", icon: LayoutDashboard },
-  { label: "Approved Requests", icon: ClipboardCheck },
-  { label: "Payment Portal", icon: Wallet },
-  { label: "Direct Purchases", icon: ShoppingCart },
-  { label: "Financial Reports", icon: ChartNoAxesCombined },
-  { label: "Exports", icon: Download },
+  {
+    label: "Dashboard",
+    href: "/accountant/dashboard",
+    icon: LayoutDashboard,
+  },
+  {
+    label: "Payment Requests",
+    href: "/accountant/dashboard",
+    icon: CreditCard,
+  },
+  {
+    label: "Employees",
+    href: "/accountant/employees",
+    icon: Users,
+  },
+  {
+    label: "Settings",
+    href: "/accountant/settings",
+    icon: Settings,
+  },
 ];
 
-const formatPKR = (amount: number) =>
-  new Intl.NumberFormat("en-PK", {
-    style: "currency",
-    currency: "PKR",
-    maximumFractionDigits: 0,
-  }).format(amount);
-
-function StatusBadge({ status }: { status: RequestStatus }) {
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${
-        status === "Paid"
-          ? "bg-emerald-50 text-emerald-700"
-          : "bg-amber-50 text-amber-700"
-      }`}
-    >
-      {status === "Paid" ? (
-        <CheckCircle2 size={13} />
-      ) : (
-        <Clock3 size={13} />
-      )}
-      {status}
-    </span>
-  );
-}
-
 export default function AccountantDashboard() {
-  const [activePage, setActivePage] = useState("Dashboard");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const [paymentFilter, setPaymentFilter] = useState("All");
-  const [requests, setRequests] =
-    useState<PurchaseRequest[]>(initialRequests);
-  const [directPurchases, setDirectPurchases] =
-    useState<DirectPurchase[]>(initialDirectPurchases);
-  const [showPurchaseForm, setShowPurchaseForm] = useState(false);
-  const [showDetails, setShowDetails] =
-    useState<PurchaseRequest | null>(null);
+  const [requests, setRequests] = useState<PurchaseRequest[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<PaymentFilter>("All");
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [selectedRequest, setSelectedRequest] =
+    useState<PurchaseRequest | null>(null);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
-const [purchaseForm, setPurchaseForm] = useState({
-  item: "",
-  category: "Office Supplies",
-  amount: "",
-  date: "",
-  description: "",
-  paymentStatus: "Unpaid" as RequestStatus,
-});
+  const fetchRequests = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError("");
 
-  const paidRequests = requests.filter((r) => r.status === "Paid");
-  const unpaidRequests = requests.filter((r) => r.status === "Unpaid");
+      const response = await fetch("/api/accountant/purchase-requests", {
+        cache: "no-store",
+      });
 
-  const totalPaid =
-    paidRequests.reduce((sum, r) => sum + r.amount, 0) +
-    directPurchases
-      .filter((p) => p.paymentStatus === "Paid")
-      .reduce((sum, p) => sum + p.amount, 0);
+      const result: ApiResponse = await response.json();
 
-  const totalUnpaid =
-    unpaidRequests.reduce((sum, r) => sum + r.amount, 0) +
-    directPurchases
-      .filter((p) => p.paymentStatus === "Unpaid")
-      .reduce((sum, p) => sum + p.amount, 0);
+      if (!response.ok || !result.success) {
+        throw new Error(
+          result.message || "Unable to fetch approved purchase requests."
+        );
+      }
 
-  const totalSpending =
-    requests.reduce((sum, r) => sum + r.amount, 0) +
-    directPurchases.reduce((sum, p) => sum + p.amount, 0);
+      const mappedRequests: PurchaseRequest[] = (
+        result.requests ?? []
+      ).map((request) => ({
+        id: request._id ?? request.id ?? "",
+        employee: request.employee ?? "Unknown employee",
+        department: request.department ?? "N/A",
+        item: request.item ?? "Unnamed item",
+        category: request.category ?? "Other",
+        quantity: Number(request.quantity ?? 1),
+        amount: Number(request.amount ?? 0),
+        date: request.date ?? "",
+        description: request.description ?? "",
+        receipt: request.receipt ?? "",
+        status:
+          request.paymentStatus?.toLowerCase() === "paid"
+            ? "Paid"
+            : "Unpaid",
+      }));
+
+      setRequests(mappedRequests);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong while fetching requests."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchRequests();
+  }, [fetchRequests]);
+
+  const paidRequests = useMemo(
+    () => requests.filter((request) => request.status === "Paid"),
+    [requests]
+  );
+
+  const unpaidRequests = useMemo(
+    () => requests.filter((request) => request.status === "Unpaid"),
+    [requests]
+  );
+
+  const totalAmount = useMemo(
+    () => requests.reduce((sum, request) => sum + request.amount, 0),
+    [requests]
+  );
+
+  const paidAmount = useMemo(
+    () => paidRequests.reduce((sum, request) => sum + request.amount, 0),
+    [paidRequests]
+  );
+
+  const unpaidAmount = useMemo(
+    () => unpaidRequests.reduce((sum, request) => sum + request.amount, 0),
+    [unpaidRequests]
+  );
 
   const filteredRequests = useMemo(() => {
+    const searchValue = search.trim().toLowerCase();
+
     return requests.filter((request) => {
-      const matchesSearch = [
-        request.id,
-        request.employee,
-        request.department,
-        request.item,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(search.toLowerCase());
+      const matchesSearch =
+        request.item.toLowerCase().includes(searchValue) ||
+        request.employee.toLowerCase().includes(searchValue) ||
+        request.department.toLowerCase().includes(searchValue) ||
+        request.category.toLowerCase().includes(searchValue) ||
+        request.id.toLowerCase().includes(searchValue);
 
-      const matchesStatus =
-        paymentFilter === "All" || request.status === paymentFilter;
+      const matchesFilter =
+        filter === "All" || request.status === filter;
 
-      return matchesSearch && matchesStatus;
+      return matchesSearch && matchesFilter;
     });
-  }, [requests, search, paymentFilter]);
+  }, [requests, search, filter]);
 
-  function togglePayment(id: string) {
-    setRequests((current) =>
-      current.map((request) =>
-        request.id === id
-          ? {
-              ...request,
-              status: request.status === "Paid" ? "Unpaid" : "Paid",
-            }
-          : request
-      )
-    );
+  const togglePayment = async (id: string) => {
+    const currentRequest = requests.find((request) => request.id === id);
 
-    setNotice("Payment status updated in this demo.");
-    window.setTimeout(() => setNotice(""), 2500);
-  }
+    if (!currentRequest || updatingId !== null) return;
 
-  function toggleDirectPurchasePayment(id: string) {
-    setDirectPurchases((current) =>
-      current.map((purchase) =>
-        purchase.id === id
-          ? {
-              ...purchase,
-              paymentStatus:
-                purchase.paymentStatus === "Paid" ? "Unpaid" : "Paid",
-            }
-          : purchase
-      )
-    );
-  }
+    const nextStatus =
+      currentRequest.status === "Paid" ? "unpaid" : "paid";
 
-  function addDirectPurchase(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+    try {
+      setUpdatingId(id);
+      setError("");
+      setNotice("");
 
-    const amount = Number(purchaseForm.amount);
+      const response = await fetch(
+        `/api/accountant/purchase-requests/${id}/payment`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ paymentStatus: nextStatus }),
+        }
+      );
 
-    if (
-      !purchaseForm.item.trim() ||
-      !Number.isFinite(amount) ||
-      amount <= 0
-    ) {
-      setNotice("Enter an item name and a valid amount.");
-      return;
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || "Unable to update payment.");
+      }
+
+      const updatedStatus: PaymentStatus =
+        nextStatus === "paid" ? "Paid" : "Unpaid";
+
+      setRequests((current) =>
+        current.map((request) =>
+          request.id === id
+            ? { ...request, status: updatedStatus }
+            : request
+        )
+      );
+
+      setSelectedRequest((current) =>
+        current?.id === id
+          ? { ...current, status: updatedStatus }
+          : current
+      );
+
+      setNotice(
+        `Payment for "${currentRequest.item}" marked ${nextStatus}.`
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Unable to update payment."
+      );
+    } finally {
+      setUpdatingId(null);
     }
+  };
 
-    const newPurchase: DirectPurchase = {
-      id: `DP-${String(Date.now()).slice(-6)}`,
-      item: purchaseForm.item.trim(),
-      category: purchaseForm.category,
-      amount,
-      date: purchaseForm.date,
-      paymentStatus: purchaseForm.paymentStatus,
-      description: purchaseForm.description.trim(),
-    };
+  const formatCurrency = (amount: number) =>
+    new Intl.NumberFormat("en-PK", {
+      style: "currency",
+      currency: "PKR",
+      maximumFractionDigits: 0,
+    }).format(amount);
 
-    setDirectPurchases((current) => [newPurchase, ...current]);
-    setPurchaseForm({
-      item: "",
-      category: "Office Supplies",
-      amount: "",
-      date: new Date().toISOString().slice(0, 10),
-      description: "",
-      paymentStatus: "Unpaid",
+  const formatDate = (date: string) => {
+    if (!date) return "—";
+
+    const parsedDate = new Date(date);
+
+    if (Number.isNaN(parsedDate.getTime())) return "—";
+
+    return parsedDate.toLocaleDateString("en-PK", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
     });
-    setShowPurchaseForm(false);
-    setActivePage("Direct Purchases");
-    setNotice("Direct purchase added in this demo.");
-    window.setTimeout(() => setNotice(""), 2500);
-  }
-
-  function exportCSV() {
-    const header = [
-      "Reference",
-      "Type",
-      "Item",
-      "Employee",
-      "Department",
-      "Date",
-      "Amount PKR",
-      "Payment Status",
-    ];
-
-    const rows = [
-      ...requests.map((r) => [
-        r.id,
-        "Approved Request",
-        r.item,
-        r.employee,
-        r.department,
-        r.date,
-        r.amount,
-        r.status,
-      ]),
-      ...directPurchases.map((p) => [
-        p.id,
-        "Direct Purchase",
-        p.item,
-        "",
-        p.category,
-        p.date,
-        p.amount,
-        p.paymentStatus,
-      ]),
-    ];
-
-    const csvCell = (value: string | number) =>
-      `"${String(value).replace(/"/g, '""')}"`;
-
-    const csv = [header, ...rows]
-      .map((row) => row.map(csvCell).join(","))
-      .join("\r\n");
-
-    const blob = new Blob(["\uFEFF" + csv], {
-      type: "text/csv;charset=utf-8;",
-    });
-
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `accountflow-financial-report-${new Date()
-      .toISOString()
-      .slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function navigate(label: string) {
-    setActivePage(label);
-    setSidebarOpen(false);
-    setSearch("");
-    setPaymentFilter("All");
-  }
-
-  const pageDescription: Record<string, string> = {
-    Dashboard: "Your financial activity and payment overview.",
-    "Approved Requests": "Review approved requests awaiting payment.",
-    "Payment Portal": "Track payments and update their status.",
-    "Direct Purchases": "Record purchases made directly by employees or the office.",
-    "Financial Reports": "Review total spending and payment summaries.",
-    Exports: "Download financial records for reporting and reconciliation.",
-    Settings: "Account and portal preferences.",
   };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800">
-      {sidebarOpen && (
+      {/* Mobile sidebar overlay */}
+      {mobileSidebarOpen && (
         <button
-          aria-label="Close navigation"
-          onClick={() => setSidebarOpen(false)}
-          className="fixed inset-0 z-40 bg-slate-950/40 lg:hidden"
+          type="button"
+          aria-label="Close sidebar overlay"
+          onClick={() => setMobileSidebarOpen(false)}
+          className="fixed inset-0 z-40 bg-slate-950/50 lg:hidden"
         />
       )}
 
+      {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-[#063d43] text-white transition-transform duration-300 lg:translate-x-0 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col border-r border-slate-200 bg-white transition-transform duration-300 lg:translate-x-0 ${
+          mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex h-20 items-center justify-between border-b border-white/10 px-6">
+        {/* Logo */}
+        <div className="flex h-20 items-center justify-between border-b border-slate-100 px-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10">
-              <ReceiptText size={22} />
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-teal-700 text-white shadow-sm">
+              <Wallet size={23} />
             </div>
+
             <div>
-              <h1 className="text-lg font-bold tracking-wide">AccountFlow</h1>
-              <p className="text-xs text-teal-100/70">Accountant Portal</p>
+              <h2 className="text-lg font-bold tracking-tight text-slate-900">
+                AccountFlow
+              </h2>
+              <p className="text-xs text-slate-500">
+                Accounting & Procurement
+              </p>
             </div>
           </div>
+
           <button
-            onClick={() => setSidebarOpen(false)}
-            className="rounded-lg p-2 hover:bg-white/10 lg:hidden"
+            type="button"
+            onClick={() => setMobileSidebarOpen(false)}
+            className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 lg:hidden"
             aria-label="Close sidebar"
           >
             <X size={20} />
           </button>
         </div>
 
-        <div className="px-5 pb-3 pt-6">
-          <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-teal-100/50">
+        {/* Accountant profile */}
+        <div className="mx-4 mt-6 rounded-2xl border border-teal-100 bg-teal-50/70 p-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-teal-700 text-sm font-bold text-white">
+              AC
+            </div>
+
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-slate-900">
+                Accountant
+              </p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                Finance Department
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-3 flex items-center gap-2 text-xs font-medium text-teal-800">
+            <span className="h-2 w-2 rounded-full bg-emerald-500" />
+            Accountant portal
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 space-y-2 overflow-y-auto px-4 py-7">
+          <p className="mb-3 px-3 text-[11px] font-bold uppercase tracking-[0.15em] text-slate-400">
             Workspace
           </p>
 
-          <nav className="space-y-1">
-            {navigation.map(({ label, icon: Icon }) => {
-              const active = activePage === label;
+          {navigation.map((item, index) => {
+            const Icon = item.icon;
+            const isActive = index === 0 || index === 1;
 
-              return (
-                <button
-                  key={label}
-                  onClick={() => navigate(label)}
-                  className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition ${
-                    active
-                      ? "bg-white text-[#063d43] shadow-sm"
-                      : "text-teal-50/80 hover:bg-white/10 hover:text-white"
-                  }`}
-                >
-                  <Icon size={19} />
-                  <span className="flex-1 font-medium">{label}</span>
-                  {label === "Approved Requests" && unpaidRequests.length > 0 && (
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs ${
-                        active
-                          ? "bg-teal-50 text-[#063d43]"
-                          : "bg-white/10 text-white"
-                      }`}
-                    >
-                      {unpaidRequests.length}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
-        </div>
+            return (
+              <a
+                key={item.label}
+                href={item.href}
+                onClick={() => setMobileSidebarOpen(false)}
+                className={`group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition ${
+                  isActive
+                    ? "bg-teal-700 text-white shadow-md shadow-teal-900/10"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`}
+              >
+                <Icon size={19} />
+                <span className="flex-1">{item.label}</span>
 
-        <div className="mt-auto p-5">
-          <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
-            <div className="mb-3 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-teal-100 font-bold text-[#063d43]">
-                AC
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">Accountant</p>
-                <p className="text-xs text-teal-100/60">Finance Department</p>
-              </div>
+                {index === 1 && (
+                  <span
+                    className={`rounded-md px-2 py-0.5 text-xs ${
+                      isActive
+                        ? "bg-white/20 text-white"
+                        : "bg-amber-100 text-amber-800"
+                    }`}
+                  >
+                    {unpaidRequests.length}
+                  </span>
+                )}
+
+                {isActive && <ChevronRight size={16} />}
+              </a>
+            );
+          })}
+
+          <div className="mt-8 rounded-2xl bg-slate-50 p-4">
+            <div className="flex items-center gap-2 text-slate-700">
+              <CreditCard size={18} />
+              <p className="text-sm font-semibold">Payment overview</p>
             </div>
-            <button
-              onClick={() => navigate("Settings")}
-              className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-sm text-teal-50/80 hover:bg-white/10"
-            >
-              <Settings size={16} />
-              Settings
-            </button>
+
+            <p className="mt-3 text-xs leading-5 text-slate-500">
+              Track approved expenses and keep payment records up to date.
+            </p>
+
+            <div className="mt-4 flex items-center justify-between text-xs">
+              <span className="text-slate-500">Unpaid requests</span>
+              <span className="font-bold text-amber-700">
+                {unpaidRequests.length}
+              </span>
+            </div>
+
+            <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
+              <div
+                className="h-full rounded-full bg-teal-600 transition-all"
+                style={{
+                  width:
+                    requests.length > 0
+                      ? `${(paidRequests.length / requests.length) * 100}%`
+                      : "0%",
+                }}
+              />
+            </div>
+
+            <p className="mt-2 text-[11px] text-slate-400">
+              {requests.length > 0
+                ? `${Math.round(
+                    (paidRequests.length / requests.length) * 100
+                  )}% of requests paid`
+                : "No approved requests yet"}
+            </p>
           </div>
+        </nav>
+
+        {/* Sidebar footer */}
+        <div className="border-t border-slate-100 p-4">
+          <a
+            href="/login"
+            className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-slate-600 transition hover:bg-red-50 hover:text-red-700"
+          >
+            <LogOut size={19} />
+            Back to Login
+          </a>
         </div>
       </aside>
 
-      <div className="min-h-screen lg:pl-72">
-        <header className="sticky top-0 z-30 flex h-20 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:px-8">
+      {/* Main content */}
+      <div className="min-h-screen lg:ml-72">
+        {/* Top bar */}
+        <header className="sticky top-0 z-30 flex h-20 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:px-6 lg:px-8">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setSidebarOpen(true)}
+              type="button"
+              onClick={() => setMobileSidebarOpen(true)}
               aria-label="Open sidebar"
-              className="rounded-lg border border-slate-200 p-2 hover:bg-slate-50 lg:hidden"
+              className="rounded-xl border border-slate-200 p-2.5 text-slate-600 hover:bg-slate-50 lg:hidden"
             >
               <Menu size={21} />
             </button>
+
             <div>
-              <p className="text-xs font-medium text-slate-400">
-                AccountFlow / Accountant
+              <p className="text-xs text-slate-500">
+                AccountFlow / Workspace
               </p>
-              <h2 className="mt-0.5 text-lg font-bold text-slate-800">
-                {activePage}
-              </h2>
+              <h1 className="mt-1 text-base font-bold text-slate-900 sm:text-lg">
+                Accountant Dashboard
+              </h1>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 sm:gap-5">
+          <div className="flex items-center gap-3">
             <div className="hidden text-right sm:block">
-              <p className="text-sm font-semibold text-slate-700">
-                Accountant
+              <p className="text-sm font-semibold text-slate-800">
+                Finance Team
               </p>
-              <p className="text-xs text-slate-400">Finance</p>
+              <p className="text-xs text-slate-500">Accountant</p>
             </div>
-            <button
-              aria-label="Notifications"
-              className="relative rounded-xl border border-slate-200 p-2.5 text-slate-500 hover:bg-slate-50"
-            >
-              <Bell size={19} />
-              {unpaidRequests.length > 0 && (
-                <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white" />
-              )}
-            </button>
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-teal-50 text-sm font-bold text-[#063d43]">
+
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-teal-100 text-sm font-bold text-teal-800 ring-2 ring-white">
               AC
             </div>
           </div>
         </header>
 
-        <main className="mx-auto max-w-[1600px] p-4 sm:p-8">
-          {notice && (
-            <div className="mb-5 flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800">
-              <CheckCircle2 size={18} />
-              {notice}
-            </div>
-          )}
-
-          <div className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <main className="mx-auto max-w-[1600px] space-y-7 p-4 sm:p-6 lg:p-8">
+          {/* Heading */}
+          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-                {activePage === "Dashboard"
-                  ? "Financial overview"
-                  : activePage}
-              </h1>
+              <h2 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+                Overview
+              </h2>
               <p className="mt-2 text-sm text-slate-500">
-                {pageDescription[activePage]}
+                Monitor approved purchase requests and manage their payments.
               </p>
             </div>
 
-            <div className="flex flex-wrap gap-3">
-              <button
-                onClick={() => setShowPurchaseForm(true)}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
-              >
-                <Plus size={17} />
-                Direct purchase
-              </button>
-              <button
-                onClick={exportCSV}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#063d43] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#08545b]"
-              >
-                <Download size={17} />
-                Export report
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => void fetchRequests()}
+              disabled={loading}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100 disabled:opacity-60"
+            >
+              <RefreshCw
+                size={16}
+                className={loading ? "animate-spin" : ""}
+              />
+              Refresh data
+            </button>
           </div>
 
-          {(activePage === "Dashboard" ||
-            activePage === "Financial Reports" ||
-            activePage === "Exports") && (
-            <>
-              <div className="mb-7 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <StatCard
-                  title="Approved requests"
-                  value={String(requests.length)}
-                  detail="Available for processing"
-                  icon={ClipboardCheck}
-                  iconClass="bg-blue-50 text-blue-700"
-                  trend="Request queue"
-                />
-                <StatCard
-                  title="Total paid"
-                  value={formatPKR(totalPaid)}
-                  detail={`${paidRequests.length} paid requests`}
-                  icon={CheckCircle2}
-                  iconClass="bg-emerald-50 text-emerald-700"
-                  trend="Payment completed"
-                />
-                <StatCard
-                  title="Total unpaid"
-                  value={formatPKR(totalUnpaid)}
-                  detail={`${unpaidRequests.length} unpaid requests`}
-                  icon={Clock3}
-                  iconClass="bg-amber-50 text-amber-700"
-                  trend="Needs attention"
-                />
-                <StatCard
-                  title="Total spending"
-                  value={formatPKR(totalSpending)}
-                  detail="Requests + direct purchases"
-                  icon={CircleDollarSign}
-                  iconClass="bg-violet-50 text-violet-700"
-                  trend="All recorded expenses"
-                />
-              </div>
-
-              <div className="mb-7 grid grid-cols-1 gap-6 xl:grid-cols-3">
-                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 xl:col-span-2">
-                  <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <h3 className="font-bold text-slate-800">
-                        Payment overview
-                      </h3>
-                      <p className="mt-1 text-sm text-slate-500">
-                        Distribution of recorded expenses
-                      </p>
-                    </div>
-                    <span className="rounded-lg bg-slate-50 px-3 py-2 text-xs font-medium text-slate-500">
-                      All records
-                    </span>
-                  </div>
-
-                  <div className="mb-5 flex items-center justify-between text-sm">
-                    <span className="text-slate-500">Paid</span>
-                    <span className="font-semibold text-slate-800">
-                      {formatPKR(totalPaid)}
-                    </span>
-                  </div>
-                  <div className="mb-6 h-3 overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className="h-full rounded-full bg-emerald-500 transition-all"
-                      style={{
-                        width: `${
-                          totalSpending
-                            ? (totalPaid / totalSpending) * 100
-                            : 0
-                        }%`,
-                      }}
-                    />
-                  </div>
-
-                  <div className="mb-5 flex items-center justify-between text-sm">
-                    <span className="text-slate-500">Unpaid</span>
-                    <span className="font-semibold text-slate-800">
-                      {formatPKR(totalUnpaid)}
-                    </span>
-                  </div>
-                  <div className="mb-6 h-3 overflow-hidden rounded-full bg-slate-100">
-                    <div
-                      className="h-full rounded-full bg-amber-400 transition-all"
-                      style={{
-                        width: `${
-                          totalSpending
-                            ? (totalUnpaid / totalSpending) * 100
-                            : 0
-                        }%`,
-                      }}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-5">
-                    <div className="rounded-xl bg-emerald-50/70 p-4">
-                      <p className="text-xs text-emerald-700">Paid percentage</p>
-                      <p className="mt-1 text-xl font-bold text-emerald-800">
-                        {totalSpending
-                          ? `${Math.round((totalPaid / totalSpending) * 100)}%`
-                          : "0%"}
-                      </p>
-                    </div>
-                    <div className="rounded-xl bg-amber-50/70 p-4">
-                      <p className="text-xs text-amber-700">
-                        Outstanding percentage
-                      </p>
-                      <p className="mt-1 text-xl font-bold text-amber-800">
-                        {totalSpending
-                          ? `${Math.round((totalUnpaid / totalSpending) * 100)}%`
-                          : "0%"}
-                      </p>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                  <div className="mb-5 flex items-center gap-3">
-                    <div className="rounded-xl bg-teal-50 p-3 text-[#063d43]">
-                      <TrendingUp size={21} />
-                    </div>
-                    <div>
-                      <h3 className="font-bold">Quick actions</h3>
-                      <p className="text-xs text-slate-500">
-                        Common finance tasks
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <QuickAction
-                      icon={ClipboardCheck}
-                      title="Process approved requests"
-                      description={`${unpaidRequests.length} currently unpaid`}
-                      onClick={() => navigate("Approved Requests")}
-                    />
-                    <QuickAction
-                      icon={Wallet}
-                      title="Manage payments"
-                      description="Update paid or unpaid status"
-                      onClick={() => navigate("Payment Portal")}
-                    />
-                    <QuickAction
-                      icon={ShoppingCart}
-                      title="Record a purchase"
-                      description="Add a direct expense"
-                      onClick={() => setShowPurchaseForm(true)}
-                    />
-                    <QuickAction
-                      icon={FileSpreadsheet}
-                      title="Financial reports"
-                      description="Download CSV records"
-                      onClick={() => navigate("Exports")}
-                    />
-                  </div>
-                </section>
-              </div>
-            </>
+          {/* Alerts */}
+          {notice && (
+            <div
+              role="status"
+              className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"
+            >
+              <CheckCircle2 size={19} className="mt-0.5 shrink-0" />
+              <p className="flex-1">{notice}</p>
+              <button
+                type="button"
+                onClick={() => setNotice("")}
+                aria-label="Dismiss notification"
+              >
+                <X size={17} />
+              </button>
+            </div>
           )}
 
-          {(activePage === "Dashboard" ||
-            activePage === "Approved Requests" ||
-            activePage === "Payment Portal") && (
-            <section className="mb-7 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <div className="flex flex-col justify-between gap-4 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:p-6">
+          {error && (
+            <div
+              role="alert"
+              className="flex flex-col justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 sm:flex-row sm:items-center"
+            >
+              <p>{error}</p>
+              <button
+                type="button"
+                onClick={() => void fetchRequests()}
+                disabled={loading}
+                className="inline-flex items-center gap-2 font-semibold underline disabled:opacity-50"
+              >
+                <RefreshCw size={15} />
+                Retry
+              </button>
+            </div>
+          )}
+
+          {/* Summary cards */}
+          <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <SummaryCard
+              title="Approved Requests"
+              value={String(requests.length)}
+              description="Approved requests in the payment queue"
+              icon={<FileText size={21} />}
+              iconClass="bg-blue-50 text-blue-700"
+            />
+
+            <SummaryCard
+              title="Total Approved Amount"
+              value={formatCurrency(totalAmount)}
+              description="Combined amount of approved requests"
+              icon={<Wallet size={21} />}
+              iconClass="bg-violet-50 text-violet-700"
+            />
+
+            <SummaryCard
+              title="Paid Amount"
+              value={formatCurrency(paidAmount)}
+              description={`${paidRequests.length} paid request(s)`}
+              icon={<CheckCircle2 size={21} />}
+              iconClass="bg-emerald-50 text-emerald-700"
+            />
+
+            <SummaryCard
+              title="Unpaid Amount"
+              value={formatCurrency(unpaidAmount)}
+              description={`${unpaidRequests.length} unpaid request(s)`}
+              icon={<Clock3 size={21} />}
+              iconClass="bg-amber-50 text-amber-700"
+            />
+          </section>
+
+          {/* Requests table */}
+          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="border-b border-slate-200 px-5 py-5 sm:px-6">
+              <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
                 <div>
-                  <h3 className="font-bold text-slate-800">
-                    {activePage === "Payment Portal"
-                      ? "Payment management"
-                      : "Approved request queue"}
+                  <h3 className="text-lg font-bold text-slate-900">
+                    Approved Purchase Requests
                   </h3>
                   <p className="mt-1 text-sm text-slate-500">
-                    Mark requests as paid after payment has been completed.
+                    Search requests and update their payment status.
                   </p>
                 </div>
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <div className="relative">
-                    <Search
-                      size={17}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-                    />
-                    <input
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      placeholder="Search requests..."
-                      className="w-full rounded-xl border border-slate-200 py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-600/10 sm:w-56"
-                    />
-                  </div>
-                  <select
-                    value={paymentFilter}
-                    onChange={(e) => setPaymentFilter(e.target.value)}
-                    className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-teal-600"
-                  >
-                    <option value="All">All statuses</option>
-                    <option value="Unpaid">Unpaid</option>
-                    <option value="Paid">Paid</option>
-                  </select>
+
+                <div className="relative w-full lg:max-w-sm">
+                  <Search
+                    size={18}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                  />
+                  <input
+                    type="search"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    placeholder="Search item, employee, department..."
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm outline-none transition placeholder:text-slate-400 focus:border-teal-600 focus:bg-white focus:ring-2 focus:ring-teal-100"
+                  />
                 </div>
               </div>
 
+              <div className="mt-5 flex flex-wrap items-center gap-2">
+                {(["All", "Unpaid", "Paid"] as PaymentFilter[]).map(
+                  (option) => {
+                    const count =
+                      option === "All"
+                        ? requests.length
+                        : option === "Paid"
+                          ? paidRequests.length
+                          : unpaidRequests.length;
+
+                    return (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => setFilter(option)}
+                        className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                          filter === option
+                            ? "bg-teal-700 text-white"
+                            : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                        }`}
+                      >
+                        {option}
+                        <span
+                          className={`rounded-md px-1.5 py-0.5 text-xs ${
+                            filter === option
+                              ? "bg-white/20 text-white"
+                              : "bg-white text-slate-600"
+                          }`}
+                        >
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  }
+                )}
+
+                <span className="ml-auto text-xs text-slate-500">
+                  {filteredRequests.length} result(s)
+                </span>
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="flex min-h-56 flex-col items-center justify-center gap-3 text-slate-500">
+                <Loader2
+                  size={28}
+                  className="animate-spin text-teal-700"
+                />
+                <p className="text-sm">Loading approved requests...</p>
+              </div>
+            ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[850px] text-left text-sm">
-                  <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                    <tr>
-                      <th className="px-6 py-4 font-semibold">Request</th>
-                      <th className="px-6 py-4 font-semibold">Employee</th>
-                      <th className="px-6 py-4 font-semibold">Date</th>
-                      <th className="px-6 py-4 font-semibold">Amount</th>
-                      <th className="px-6 py-4 font-semibold">Status</th>
-                      <th className="px-6 py-4 text-right font-semibold">
+                <table className="w-full min-w-[950px] text-left">
+                  <thead className="bg-slate-50">
+                    <tr className="border-b border-slate-200">
+                      <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        Employee / Item
+                      </th>
+                      <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        Department
+                      </th>
+                      <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        Date
+                      </th>
+                      <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        Amount
+                      </th>
+                      <th className="px-6 py-4 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        Payment Status
+                      </th>
+                      <th className="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
                         Actions
                       </th>
                     </tr>
                   </thead>
+
                   <tbody className="divide-y divide-slate-100">
-                    {filteredRequests.length > 0 ? (
-                      filteredRequests.map((request) => (
-                        <tr
-                          key={request.id}
-                          className="transition hover:bg-slate-50/70"
-                        >
-                          <td className="px-6 py-4">
-                            <p className="font-semibold text-slate-800">
-                              {request.item}
-                            </p>
-                            <p className="mt-1 text-xs text-slate-400">
-                              {request.id} · {request.department}
-                            </p>
-                          </td>
-                          <td className="px-6 py-4">
-                            <p className="font-medium">{request.employee}</p>
-                            <p className="mt-1 text-xs text-slate-400">
-                              {request.department}
-                            </p>
-                          </td>
-                          <td className="px-6 py-4 text-slate-500">
-                            {request.date}
-                          </td>
-                          <td className="px-6 py-4 font-semibold text-slate-800">
-                            {formatPKR(request.amount)}
-                          </td>
-                          <td className="px-6 py-4">
-                            <StatusBadge status={request.status} />
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex justify-end gap-2">
-                              <button
-                                title="View request"
-                                onClick={() => setShowDetails(request)}
-                                className="rounded-lg border border-slate-200 p-2 text-slate-500 transition hover:bg-slate-100"
-                              >
-                                <Eye size={16} />
-                              </button>
-                              <button
-                                onClick={() => togglePayment(request.id)}
-                                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition ${
-                                  request.status === "Paid"
-                                    ? "border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
-                                    : "bg-[#063d43] text-white hover:bg-[#08545b]"
-                                }`}
-                              >
-                                {request.status === "Paid" ? (
-                                  <>
-                                    <Clock3 size={14} /> Mark unpaid
-                                  </>
-                                ) : (
-                                  <>
-                                    <Check size={14} /> Mark paid
-                                  </>
-                                )}
-                              </button>
+                    {filteredRequests.map((request) => (
+                      <tr
+                        key={request.id}
+                        className="transition hover:bg-slate-50"
+                      >
+                        <td className="px-6 py-4">
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-50 text-teal-700">
+                              <Banknote size={19} />
                             </div>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td
-                          colSpan={6}
-                          className="px-6 py-12 text-center text-slate-500"
-                        >
-                          No matching requests found.
+                            <div>
+                              <p className="font-semibold text-slate-800">
+                                {request.item}
+                              </p>
+                              <p className="mt-1 text-sm text-slate-500">
+                                {request.employee}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-400">
+                                {request.category} · Qty: {request.quantity}
+                              </p>
+                            </div>
+                          </div>
                         </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
 
-              <div className="flex flex-col gap-2 border-t border-slate-100 px-6 py-4 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-                <span>
-                  Showing {filteredRequests.length} of {requests.length} requests
-                </span>
-                <span>
-                  Unpaid requests: {unpaidRequests.length}
-                </span>
-              </div>
-            </section>
-          )}
+                        <td className="px-6 py-4">
+                          <span className="inline-flex rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-600">
+                            {request.department}
+                          </span>
+                        </td>
 
-          {(activePage === "Dashboard" ||
-            activePage === "Direct Purchases") && (
-            <section className="mb-7 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-              <div className="flex flex-col justify-between gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:p-6">
-                <div>
-                  <h3 className="font-bold text-slate-800">
-                    Direct purchases
-                  </h3>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Expenses recorded outside the normal request approval flow.
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowPurchaseForm(true)}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-50 px-4 py-2.5 text-sm font-semibold text-[#063d43] hover:bg-teal-100"
-                >
-                  <Plus size={17} />
-                  Add purchase
-                </button>
-              </div>
+                        <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-600">
+                          {formatDate(request.date)}
+                        </td>
 
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[700px] text-left text-sm">
-                  <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                    <tr>
-                      <th className="px-6 py-4 font-semibold">Purchase</th>
-                      <th className="px-6 py-4 font-semibold">Category</th>
-                      <th className="px-6 py-4 font-semibold">Date</th>
-                      <th className="px-6 py-4 font-semibold">Amount</th>
-                      <th className="px-6 py-4 font-semibold">Status</th>
-                      <th className="px-6 py-4 font-semibold">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {directPurchases.map((purchase) => (
-                      <tr key={purchase.id} className="hover:bg-slate-50/70">
+                        <td className="whitespace-nowrap px-6 py-4 text-sm font-bold text-slate-800">
+                          {formatCurrency(request.amount)}
+                        </td>
+
                         <td className="px-6 py-4">
-                          <p className="font-semibold">{purchase.item}</p>
-                          <p className="mt-1 text-xs text-slate-400">
-                            {purchase.id}
-                          </p>
+                          <PaymentBadge status={request.status} />
                         </td>
-                        <td className="px-6 py-4 text-slate-500">
-                          {purchase.category}
-                        </td>
-                        <td className="px-6 py-4 text-slate-500">
-                          {purchase.date}
-                        </td>
-                        <td className="px-6 py-4 font-semibold">
-                          {formatPKR(purchase.amount)}
-                        </td>
+
                         <td className="px-6 py-4">
-                          <StatusBadge status={purchase.paymentStatus} />
-                        </td>
-                        <td className="px-6 py-4">
-                          <button
-                            onClick={() =>
-                              toggleDirectPurchasePayment(purchase.id)
-                            }
-                            className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold hover:bg-slate-50"
-                          >
-                            Mark{" "}
-                            {purchase.paymentStatus === "Paid"
-                              ? "unpaid"
-                              : "paid"}
-                          </button>
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedRequest(request)}
+                              title="View request details"
+                              aria-label={`View ${request.item} details`}
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-700"
+                            >
+                              <Eye size={17} />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => void togglePayment(request.id)}
+                              disabled={updatingId !== null}
+                              className={`inline-flex min-w-[110px] items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition disabled:opacity-60 ${
+                                request.status === "Paid"
+                                  ? "border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                                  : "bg-teal-700 text-white hover:bg-teal-800"
+                              }`}
+                            >
+                              {updatingId === request.id ? (
+                                <Loader2
+                                  size={14}
+                                  className="animate-spin"
+                                />
+                              ) : request.status === "Paid" ? (
+                                <Clock3 size={14} />
+                              ) : (
+                                <CreditCard size={14} />
+                              )}
+
+                              {updatingId === request.id
+                                ? "Saving..."
+                                : request.status === "Paid"
+                                  ? "Mark Unpaid"
+                                  : "Mark Paid"}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
-                    {directPurchases.length === 0 && (
+
+                    {filteredRequests.length === 0 && (
                       <tr>
-                        <td
-                          colSpan={6}
-                          className="px-6 py-10 text-center text-slate-500"
-                        >
-                          No direct purchases have been added.
+                        <td colSpan={6} className="px-6 py-16 text-center">
+                          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                            <FileText size={25} />
+                          </div>
+                          <h4 className="mt-4 font-semibold text-slate-800">
+                            No purchase requests found
+                          </h4>
+                          <p className="mt-1 text-sm text-slate-500">
+                            {requests.length === 0
+                              ? "Approved purchase requests will appear here."
+                              : "Try changing your search or payment filter."}
+                          </p>
+
+                          {(search || filter !== "All") && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSearch("");
+                                setFilter("All");
+                              }}
+                              className="mt-4 text-sm font-semibold text-teal-700 hover:underline"
+                            >
+                              Clear filters
+                            </button>
+                          )}
                         </td>
                       </tr>
                     )}
                   </tbody>
                 </table>
               </div>
-            </section>
-          )}
+            )}
 
-          {activePage === "Financial Reports" && (
-            <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h3 className="font-bold">Financial summary</h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  Totals from the current sample records.
+            {!loading && requests.length > 0 && (
+              <div className="flex flex-col justify-between gap-2 border-t border-slate-200 bg-slate-50 px-6 py-4 text-sm sm:flex-row sm:items-center">
+                <p className="text-slate-500">
+                  Showing {filteredRequests.length} of {requests.length} approved requests
                 </p>
-                <div className="mt-6 space-y-4">
-                  <ReportLine label="Approved requests" value={formatPKR(requests.reduce((s, r) => s + r.amount, 0))} />
-                  <ReportLine label="Direct purchases" value={formatPKR(directPurchases.reduce((s, p) => s + p.amount, 0))} />
-                  <ReportLine label="Paid" value={formatPKR(totalPaid)} />
-                  <ReportLine label="Unpaid" value={formatPKR(totalUnpaid)} />
-                  <div className="border-t border-slate-100 pt-4">
-                    <ReportLine label="Total expenses" value={formatPKR(totalSpending)} strong />
-                  </div>
-                </div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="flex items-center gap-3">
-                  <div className="rounded-xl bg-teal-50 p-3 text-[#063d43]">
-                    <FileSpreadsheet size={22} />
-                  </div>
-                  <div>
-                    <h3 className="font-bold">Export financial data</h3>
-                    <p className="mt-1 text-sm text-slate-500">
-                      Download your current records as a CSV file.
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={exportCSV}
-                  className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#063d43] px-4 py-3 text-sm font-semibold text-white hover:bg-[#08545b]"
-                >
-                  <Download size={17} />
-                  Download CSV report
-                </button>
-                <p className="mt-3 text-xs leading-5 text-slate-400">
-                  You can open the downloaded CSV in Excel or import it into a
-                  spreadsheet application.
+                <p className="font-semibold text-slate-700">
+                  Unpaid balance: {formatCurrency(unpaidAmount)}
                 </p>
               </div>
-            </section>
-          )}
-
-          {activePage === "Exports" && (
-            <section className="max-w-3xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex items-start gap-4">
-                <div className="rounded-xl bg-teal-50 p-3 text-[#063d43]">
-                  <Download size={24} />
-                </div>
-                <div>
-                  <h3 className="font-bold">Export financial records</h3>
-                  <p className="mt-2 text-sm leading-6 text-slate-500">
-                    Export approved requests and direct purchases with their
-                    amounts, dates, departments, and payment statuses.
-                  </p>
-                  <button
-                    onClick={exportCSV}
-                    className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#063d43] px-4 py-3 text-sm font-semibold text-white hover:bg-[#08545b]"
-                  >
-                    <Download size={17} />
-                    Export CSV
-                  </button>
-                </div>
-              </div>
-            </section>
-          )}
-
-          {activePage === "Settings" && (
-            <section className="max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="font-bold">Accountant settings</h3>
-              <p className="mt-2 text-sm text-slate-500">
-                Account preferences and security options can be connected here.
-              </p>
-              <div className="mt-6 rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
-                Signed in as Accountant · Finance Department
-              </div>
-            </section>
-          )}
+            )}
+          </section>
         </main>
       </div>
 
-      {showPurchaseForm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-slate-950/50 p-4">
-          <div className="my-auto w-full max-w-xl rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
+      {/* Request details modal */}
+      {selectedRequest && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-slate-950/50 p-4"
+          onClick={() => setSelectedRequest(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="request-details-title"
+            className="my-auto w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4">
               <div>
-                <h3 className="text-lg font-bold">Add direct purchase</h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  Record an expense made directly.
+                <p className="text-sm font-medium text-teal-700">
+                  Purchase Request Details
                 </p>
+                <h2
+                  id="request-details-title"
+                  className="mt-1 text-xl font-bold text-slate-900"
+                >
+                  {selectedRequest.item}
+                </h2>
               </div>
+
               <button
-                onClick={() => setShowPurchaseForm(false)}
-                aria-label="Close form"
+                type="button"
+                onClick={() => setSelectedRequest(null)}
+                aria-label="Close details"
                 className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={addDirectPurchase} className="space-y-5 p-6">
+            <div className="mt-5 flex items-center justify-between rounded-xl bg-slate-50 p-4">
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Item or purchase name *
-                </label>
-                <input
-                  required
-                  value={purchaseForm.item}
-                  onChange={(e) =>
-                    setPurchaseForm({ ...purchaseForm, item: e.target.value })
-                  }
-                  placeholder="e.g. Office supplies"
-                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-600/10"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Category *
-                  </label>
-                  <select
-                    value={purchaseForm.category}
-                    onChange={(e) =>
-                      setPurchaseForm({
-                        ...purchaseForm,
-                        category: e.target.value,
-                      })
-                    }
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-teal-600"
-                  >
-                    <option>Office Supplies</option>
-                    <option>Food</option>
-                    <option>Travel</option>
-                    <option>Petty Cash</option>
-                    <option>Maintenance</option>
-                    <option>Utilities</option>
-                    <option>Other</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Amount (PKR) *
-                  </label>
-                  <input
-                    required
-                    min="1"
-                    type="number"
-                    value={purchaseForm.amount}
-                    onChange={(e) =>
-                      setPurchaseForm({
-                        ...purchaseForm,
-                        amount: e.target.value,
-                      })
-                    }
-                    placeholder="0"
-                    className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-600/10"
-                  />
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Purchase date *
-                  </label>
-                  <input
-                    required
-                    type="date"
-                    value={purchaseForm.date}
-                    onChange={(e) =>
-                      setPurchaseForm({
-                        ...purchaseForm,
-                        date: e.target.value,
-                      })
-                    }
-                    className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-teal-600"
-                  />
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">
-                    Payment status
-                  </label>
-                  <select
-                    value={purchaseForm.paymentStatus}
-                    onChange={(e) =>
-                      setPurchaseForm({
-                        ...purchaseForm,
-                        paymentStatus: e.target.value as RequestStatus,
-                      })
-                    }
-                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-teal-600"
-                  >
-                    <option value="Unpaid">Unpaid</option>
-                    <option value="Paid">Paid</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-medium text-slate-700">
-                  Description
-                </label>
-                <textarea
-                  rows={3}
-                  value={purchaseForm.description}
-                  onChange={(e) =>
-                    setPurchaseForm({
-                      ...purchaseForm,
-                      description: e.target.value,
-                    })
-                  }
-                  placeholder="Additional purchase details..."
-                  className="w-full resize-y rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-600/10"
-                />
-              </div>
-
-              <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
-                <button
-                  type="button"
-                  onClick={() => setShowPurchaseForm(false)}
-                  className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#063d43] px-5 py-3 text-sm font-semibold text-white hover:bg-[#08545b]"
-                >
-                  <Plus size={17} />
-                  Save purchase
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {showDetails && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-            <div className="mb-5 flex items-start justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                  Request details
-                </p>
-                <h3 className="mt-1 text-xl font-bold">{showDetails.item}</h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  {showDetails.id}
+                <p className="text-sm text-slate-500">Request amount</p>
+                <p className="mt-1 text-xl font-bold text-slate-900">
+                  {formatCurrency(selectedRequest.amount)}
                 </p>
               </div>
-              <button
-                onClick={() => setShowDetails(null)}
-                aria-label="Close request details"
-                className="rounded-lg p-2 hover:bg-slate-100"
+              <PaymentBadge status={selectedRequest.status} />
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-4">
+              <DetailItem label="Employee" value={selectedRequest.employee} />
+              <DetailItem label="Department" value={selectedRequest.department} />
+              <DetailItem label="Category" value={selectedRequest.category} />
+              <DetailItem label="Quantity" value={String(selectedRequest.quantity)} />
+              <DetailItem label="Request Date" value={formatDate(selectedRequest.date)} />
+              <DetailItem label="Request ID" value={selectedRequest.id} />
+            </div>
+
+            <div className="mt-5">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Description
+              </p>
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                {selectedRequest.description || "No description provided."}
+              </p>
+            </div>
+
+            {selectedRequest.receipt && (
+              <a
+                href={selectedRequest.receipt}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-teal-700 hover:underline"
               >
-                <X size={19} />
+                <FileText size={17} />
+                View receipt
+              </a>
+            )}
+
+            <div className="mt-6 flex justify-end gap-3 border-t border-slate-100 pt-5">
+              <button
+                type="button"
+                onClick={() => setSelectedRequest(null)}
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Close
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void togglePayment(selectedRequest.id)}
+                disabled={updatingId !== null}
+                className="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-60"
+              >
+                {updatingId === selectedRequest.id && (
+                  <Loader2 size={15} className="animate-spin" />
+                )}
+                {selectedRequest.status === "Paid"
+                  ? "Mark Unpaid"
+                  : "Mark Paid"}
               </button>
             </div>
-
-            <div className="space-y-4">
-              <ReportLine label="Employee" value={showDetails.employee} />
-              <ReportLine label="Department" value={showDetails.department} />
-              <ReportLine label="Date" value={showDetails.date} />
-              <ReportLine label="Amount" value={formatPKR(showDetails.amount)} />
-              <div className="flex items-center justify-between border-t border-slate-100 pt-4">
-                <span className="text-sm text-slate-500">Payment status</span>
-                <StatusBadge status={showDetails.status} />
-              </div>
-            </div>
-
-            <button
-              onClick={() => {
-                togglePayment(showDetails.id);
-                setShowDetails(null);
-              }}
-              className="mt-6 w-full rounded-xl bg-[#063d43] px-4 py-3 text-sm font-semibold text-white hover:bg-[#08545b]"
-            >
-              Mark {showDetails.status === "Paid" ? "unpaid" : "paid"}
-            </button>
           </div>
         </div>
       )}
@@ -1200,91 +909,73 @@ const [purchaseForm, setPurchaseForm] = useState({
   );
 }
 
-function StatCard({
+function SummaryCard({
   title,
   value,
-  detail,
-  icon: Icon,
+  description,
+  icon,
   iconClass,
-  trend,
 }: {
   title: string;
   value: string;
-  detail: string;
-  icon: React.ElementType;
+  description: string;
+  icon: ReactNode;
   iconClass: string;
-  trend: string;
 }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <p className="text-sm font-medium text-slate-500">{title}</p>
-          <h3 className="mt-3 break-words text-2xl font-bold tracking-tight text-slate-900">
+          <p className="mt-3 break-words text-2xl font-bold tracking-tight text-slate-900">
             {value}
-          </h3>
+          </p>
         </div>
-        <div className={`rounded-xl p-3 ${iconClass}`}>
-          <Icon size={21} />
+
+        <div
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${iconClass}`}
+        >
+          {icon}
         </div>
       </div>
-      <p className="mt-3 text-xs text-slate-500">{detail}</p>
-      <div className="mt-4 flex items-center gap-1.5 border-t border-slate-100 pt-3 text-xs text-slate-500">
-        <ArrowUpRight size={14} />
-        {trend}
-      </div>
+
+      <p className="mt-3 text-xs leading-5 text-slate-500">
+        {description}
+      </p>
     </div>
   );
 }
 
-function QuickAction({
-  icon: Icon,
-  title,
-  description,
-  onClick,
-}: {
-  icon: React.ElementType;
-  title: string;
-  description: string;
-  onClick: () => void;
-}) {
+function PaymentBadge({ status }: { status: PaymentStatus }) {
+  const isPaid = status === "Paid";
+
   return (
-    <button
-      onClick={onClick}
-      className="group flex w-full items-center gap-3 rounded-xl border border-slate-100 p-3 text-left transition hover:border-teal-100 hover:bg-teal-50/50"
+    <span
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold ${
+        isPaid
+          ? "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200"
+          : "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200"
+      }`}
     >
-      <div className="rounded-lg bg-slate-50 p-2.5 text-slate-600 transition group-hover:bg-teal-100 group-hover:text-[#063d43]">
-        <Icon size={18} />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-slate-700">{title}</p>
-        <p className="mt-1 text-xs text-slate-400">{description}</p>
-      </div>
-      <ArrowUpRight
-        size={16}
-        className="text-slate-300 transition group-hover:text-[#063d43]"
-      />
-    </button>
+      {isPaid ? <CheckCircle2 size={14} /> : <Clock3 size={14} />}
+      {status}
+    </span>
   );
 }
 
-function ReportLine({
+function DetailItem({
   label,
   value,
-  strong = false,
 }: {
   label: string;
   value: string;
-  strong?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4">
-      <span className={strong ? "font-semibold text-slate-800" : "text-sm text-slate-500"}>
-        {label}
-      </span>
-      <span className={strong ? "text-lg font-bold text-[#063d43]" : "text-sm font-semibold text-slate-800"}>
+    <div className="min-w-0">
+      <p className="text-xs font-medium text-slate-500">{label}</p>
+      <p className="mt-1 break-words text-sm font-semibold text-slate-800">
         {value}
-      </span>
+      </p>
     </div>
   );
 }

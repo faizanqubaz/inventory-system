@@ -47,13 +47,28 @@ export default function LoginForm() {
     setLoading(true);
 
     try {
-      const response = await dispatch(Login(form)).unwrap();
+      const response: any = await dispatch(Login(form)).unwrap();
 
+      const { redirectTo, user } = response;
+      console.log('redirectTo',redirectTo)
+      console.log('user',user.role == "employee")
+      if (user.role == "employee" || user.role === "accountant") {
+        console.log('running')
+        router.push(
+          `${redirectTo}?${new URLSearchParams({
+            employeeId: user.id,
+          }).toString()}`
+        );
+      } else {
+        router.push(redirectTo);
+      }
+
+    
       if (!response.redirectTo) {
         throw new Error("Login succeeded, but no dashboard was provided.");
       }
 
-      router.push(response.redirectTo);
+      // router.push(response.redirectTo);
     } catch (err) {
       setError(
         typeof err === "string"

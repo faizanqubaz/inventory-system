@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import MyHeading from "@/components/common/heading";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { ShoppingCart, FileText } from "lucide-react";
+
+import MyHeading from "@/components/common/heading";
 import EmplyeeRequestFrom from "@/components/ui/employee-requestform";
-import { useAppSelector } from "@/store/hook";
 
 type PurchaseRequest = {
   id: string;
@@ -14,20 +15,21 @@ type PurchaseRequest = {
   amount: number | string;
   date: string;
   status: "pending" | "approved" | "rejected" | string;
+  paymentStatus: "paid" | "unpaid" | string;
 };
 
-export default function EmployeeDashboard() {
-  // Get the currently logged-in employee from Redux.
-  const user = useAppSelector((state:any) => state.auth.user);
+function EmployeeDashboardContent() {
+  const searchParams = useSearchParams();
+  const employeeId = searchParams.get("employeeId");
 
   const [requests, setRequests] = useState<PurchaseRequest[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(true);
   const [error, setError] = useState("");
 
-  // Fetch only the requests belonging to the current employee.
   const fetchMyRequests = useCallback(async () => {
-    if (!user?.id) {
+    if (!employeeId) {
       setRequests([]);
+      setError("Employee ID is missing from the URL.");
       setLoadingRequests(false);
       return;
     }
@@ -37,11 +39,15 @@ export default function EmployeeDashboard() {
 
     try {
       const response = await fetch(
-        `/api/employees/purchase-requests?employeeId=${encodeURIComponent(user.id)}`,
+        `/api/employees/purchase-requests?employeeId=${encodeURIComponent(
+          employeeId
+        )}`,
         { cache: "no-store" }
       );
 
       const data = await response.json();
+
+      console.log("responsefromemployees", data);
 
       if (!response.ok) {
         throw new Error(
@@ -49,9 +55,27 @@ export default function EmployeeDashboard() {
         );
       }
 
-      setRequests(data.requests ?? []);
+      // Normalize the API response and include paymentStatus.
+      const mappedRequests: PurchaseRequest[] = (
+        data.requests ?? []
+      ).map((request: any) => ({
+        id: request.id ?? request._id?.toString() ?? "",
+        itemName: request.itemName ?? "",
+        category: request.category ?? "",
+        quantity: request.quantity ?? 0,
+        amount: request.amount ?? 0,
+        date: request.date ?? "",
+        status: request.status ?? "pending",
+        paymentStatus:
+          request.paymentStatus?.toLowerCase() === "paid"
+            ? "paid"
+            : "unpaid",
+      }));
+
+      setRequests(mappedRequests);
     } catch (err) {
       console.error("Failed to fetch purchase requests:", err);
+
       setError(
         err instanceof Error
           ? err.message
@@ -60,12 +84,11 @@ export default function EmployeeDashboard() {
     } finally {
       setLoadingRequests(false);
     }
-  }, [user?.id]);
+  }, [employeeId]);
 
   useEffect(() => {
     void fetchMyRequests();
 
-    // Refresh the list when a new request is successfully submitted.
     const handleRequestCreated = () => {
       void fetchMyRequests();
     };
@@ -83,19 +106,30 @@ export default function EmployeeDashboard() {
     };
   }, [fetchMyRequests]);
 
-const getStatusClasses = (status?: string) => {
-  switch ((status ?? "pending").toLowerCase()) {
-    case "approved":
-      return "border-green-200 bg-green-50 text-green-700";
+  const getStatusClasses = (status?: string) => {
+    switch ((status ?? "pending").toLowerCase()) {
+      case "approved":
+        return "border-green-200 bg-green-50 text-green-700";
 
-    case "rejected":
-      return "border-red-200 bg-red-50 text-red-700";
+      case "rejected":
+        return "border-red-200 bg-red-50 text-red-700";
 
-    case "pending":
-    default:
-      return "border-amber-200 bg-amber-50 text-amber-700";
-  }
-};
+      case "pending":
+      default:
+        return "border-amber-200 bg-amber-50 text-amber-700";
+    }
+  };
+
+  const getPaymentStatusClasses = (paymentStatus?: string) => {
+    switch ((paymentStatus ?? "unpaid").toLowerCase()) {
+      case "paid":
+        return "border-emerald-200 bg-emerald-50 text-emerald-700";
+
+      case "unpaid":
+      default:
+        return "border-orange-200 bg-orange-50 text-orange-700";
+    }
+  };
 
   const formatDate = (date: string) => {
     const parsedDate = new Date(
@@ -124,6 +158,7 @@ const getStatusClasses = (status?: string) => {
           <h2 className="text-xl font-bold tracking-tight text-teal-900">
             Employee Portal
           </h2>
+
           <p className="mt-1 text-xs text-gray-500">
             Accounting &amp; Procurement
           </p>
@@ -147,16 +182,17 @@ const getStatusClasses = (status?: string) => {
           />
 
           <p className="mt-2 text-sm leading-6 text-gray-500">
-            Submit purchase requests, record expenses, and upload supporting
-            receipts for review and approval.
+            Submit purchase requests, record expenses, and upload
+            supporting receipts for review and approval.
           </p>
         </div>
 
+        {/* Purchase Request Form */}
         <EmplyeeRequestFrom />
 
-        {/* Request History */}
+        {/* Purchase Request History */}
         <div className="mt-8 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-8">
-          <div className="mb-6 flex items-center gap-3">
+          <div className="mb-6 flex flex-wrap items-center gap-3">
             <div className="rounded-lg bg-teal-50 p-2.5 text-teal-800">
               <FileText size={21} />
             </div>
@@ -166,34 +202,38 @@ const getStatusClasses = (status?: string) => {
                 children="My Purchase Requests"
                 headingcls="text-lg font-bold text-gray-900"
               />
+
               <p className="mt-1 text-sm text-gray-500">
-                View the purchase requests you have submitted.
+                View your request approval and payment statuses.
               </p>
             </div>
 
             <button
               type="button"
               onClick={() => void fetchMyRequests()}
-              disabled={loadingRequests || !user?.id}
+              disabled={loadingRequests || !employeeId}
               className="ml-auto rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loadingRequests ? "Loading..." : "Refresh"}
             </button>
           </div>
 
-          {!user?.id && (
+          {!employeeId && (
             <p className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-700">
-              Please log in to view your purchase requests.
+              Employee ID is missing. Please open the dashboard with a
+              valid employeeId query parameter.
             </p>
           )}
 
           {error && (
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
               <p>{error}</p>
+
               <button
                 type="button"
                 onClick={() => void fetchMyRequests()}
-                className="font-semibold underline"
+                disabled={!employeeId || loadingRequests}
+                className="font-semibold underline disabled:opacity-50"
               >
                 Try again
               </button>
@@ -201,22 +241,32 @@ const getStatusClasses = (status?: string) => {
           )}
 
           <div className="overflow-x-auto rounded-xl border border-gray-100">
-            <table className="w-full min-w-[750px] text-left text-sm">
+            <table className="w-full min-w-[950px] text-left text-sm">
               <thead className="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
                 <tr>
                   <th className="px-5 py-4 font-semibold">Item</th>
                   <th className="px-5 py-4 font-semibold">Category</th>
                   <th className="px-5 py-4 font-semibold">Quantity</th>
-                  <th className="px-5 py-4 font-semibold">Amount (PKR)</th>
+                  <th className="px-5 py-4 font-semibold">
+                    Amount (PKR)
+                  </th>
                   <th className="px-5 py-4 font-semibold">Date</th>
-                  <th className="px-5 py-4 font-semibold">Status</th>
+                  <th className="px-5 py-4 font-semibold">
+                    Request Status
+                  </th>
+                  <th className="px-5 py-4 font-semibold">
+                    Payment Status
+                  </th>
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-gray-100">
                 {loadingRequests ? (
                   <tr>
-                    <td colSpan={6} className="px-5 py-12 text-center text-gray-500">
+                    <td
+                      colSpan={7}
+                      className="px-5 py-12 text-center text-gray-500"
+                    >
                       Loading your purchase requests...
                     </td>
                   </tr>
@@ -246,26 +296,53 @@ const getStatusClasses = (status?: string) => {
                         {formatDate(request.date)}
                       </td>
 
+                      {/* Request approval status */}
                       <td className="px-5 py-4">
                         <span
-                          className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold capitalize ${getStatusClasses(request.status)}`}
+                          className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold capitalize ${getStatusClasses(
+                            request.status
+                          )}`}
                         >
                           {request.status}
+                        </span>
+                      </td>
+
+                      {/* Payment status from MongoDB */}
+                      <td className="px-5 py-4">
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold capitalize ${getPaymentStatusClasses(
+                            request.paymentStatus
+                          )}`}
+                        >
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${
+                              request.paymentStatus.toLowerCase() === "paid"
+                                ? "bg-emerald-500"
+                                : "bg-orange-500"
+                            }`}
+                          />
+
+                          {request.paymentStatus}
                         </span>
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} className="px-5 py-12 text-center">
+                    <td
+                      colSpan={7}
+                      className="px-5 py-12 text-center"
+                    >
                       <div className="flex flex-col items-center">
                         <FileText
                           size={32}
                           className="mb-3 text-gray-300"
                         />
+
                         <p className="font-medium text-gray-600">
                           No purchase requests yet
                         </p>
+
                         <p className="mt-1 text-xs text-gray-400">
                           Your submitted requests will appear here.
                         </p>
@@ -279,5 +356,22 @@ const getStatusClasses = (status?: string) => {
         </div>
       </main>
     </div>
+  );
+}
+
+// Keep useSearchParams inside Suspense to avoid prerendering errors.
+export default function EmployeeDashboard() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-gray-50">
+          <p className="text-sm font-medium text-gray-600">
+            Loading employee dashboard...
+          </p>
+        </div>
+      }
+    >
+      <EmployeeDashboardContent />
+    </Suspense>
   );
 }

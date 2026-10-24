@@ -138,7 +138,6 @@ export async function POST(request: NextRequest) {
     const uploaded = await saveReceipt(receiptFile);
     uploadedFilePath = uploaded.filePath;
 
-    // // Save the purchase request as pending.
     const purchaseRequest = await PurchaseRequest.create({
       itemName,
       category,
@@ -148,7 +147,12 @@ export async function POST(request: NextRequest) {
       date,
       employeeId,
       receipt: uploaded.receiptUrl,
+
+      // Approval status
       status: "pending",
+
+      // Payment status
+      paymentStatus: "unpaid",
     });
 
     savedRequestId = purchaseRequest._id.toString();
@@ -237,6 +241,7 @@ export async function GET(request: NextRequest) {
         _id: request._id.toString(),
         employeeId: request.employeeId.toString(),
         date: request.date.toISOString(),
+        paymentStatus: request.paymentStatus ?? "unpaid",
       })),
     });
   } catch (error) {
