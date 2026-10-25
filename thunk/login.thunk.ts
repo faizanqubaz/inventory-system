@@ -22,7 +22,7 @@ export const Login = createAsyncThunk<
           },
         }
       );
-      console.log('responsedata',response.data)
+      
       return response.data;
     } catch (error) {
       if (axios.isAxiosError(error)) {

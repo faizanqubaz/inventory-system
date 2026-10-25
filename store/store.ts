@@ -2,7 +2,9 @@ import { configureStore } from "@reduxjs/toolkit";
 import authReducer from "./slice/authslice";
 import employeeeReducer from './slice/employeesslice'
 import dashboardReducer from './slice/dashboard.slice'
-import purchaseRequestsReducer from './slice/purchaseRequests.slice'
+import purchaseRequestsReducer from './slice/purchaseRequests.slice';
+import notificationReducer from './slice/notification.slice';
+
 
 export const store = configureStore({
   reducer: {
@@ -10,6 +12,7 @@ export const store = configureStore({
     dashboard: dashboardReducer,
     employees: employeeeReducer,
     purchaseRequests: purchaseRequestsReducer,
+    notifications: notificationReducer,
 
   },
 });

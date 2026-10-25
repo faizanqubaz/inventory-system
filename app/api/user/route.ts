@@ -50,7 +50,7 @@ export async function POST(request: Request) {
 
     const dashboards: Record<string, string> = {
       admin: "/admin/dashboard",
-      accountant: "/accountant/dashboard",
+      accountant: "/admin/accountant/dashboard",
       employee: "/admin/employees/dashboard",
     };
 

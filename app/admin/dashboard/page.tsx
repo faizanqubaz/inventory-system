@@ -34,6 +34,8 @@ import {
   getRequestId,
 } from "@/libs/reusable";
 import AdminSidebar from "@/components/ui/AdminSidebar";
+import MyButton from "@/components/common/button";
+import { fetchNotifications } from "@/thunk/notification.thunk";
 
 export default function AdminDashboard() {
   const dispatch = useDispatch<AppDispatch>();
@@ -71,90 +73,73 @@ export default function AdminDashboard() {
     setCurrentDate(new Date());
   }, []);
 
-  // Load purchase requests, statistics, and notifications
-  const loadDashboard = useCallback(
-    async (isRefresh = false) => {
-      if (isRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
+// Load purchase requests, statistics, and notifications
+const loadDashboard = useCallback(
+  async (isRefresh = false) => {
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true); 
+    }
 
-      setDashboardError("");
-      setSuccess("");
+    setDashboardError("");
+    setSuccess("");
 
-      try {
-        const requestsPromise = dispatch(fetchPurchaseRequests());
-        const statsPromise = dispatch(fetchDashboardStats());
+    try {
+      const requestsPromise = dispatch(fetchPurchaseRequests());
+      const statsPromise = dispatch(fetchDashboardStats());
+      const notificationPromise = dispatch(fetchNotifications());
 
-        const notificationsPromise = (async () => {
-          const response = await fetch("/api/admin/notifications", {
-            method: "GET",
-            cache: "no-store",
-          });
+      const [
+        requestsAction,
+        statsAction,
+        notificationsAction,
+      ] = await Promise.all([
+        requestsPromise,
+        statsPromise,
+        notificationPromise,
+      ]);
 
-          const result = await response.json();
-
-          if (!response.ok) {
-            throw new Error(
-              result.message || "Failed to load notifications."
-            );
-          }
-
-          const notificationList =
-            result.notifications ??
-            result.data?.notifications ??
-            result.data ??
-            [];
-
-          if (!Array.isArray(notificationList)) {
-            throw new Error(
-              "The notifications API returned an invalid response."
-            );
-          }
-
-          setNotifications(notificationList as NotificationData[]);
-        })();
-
-        const [requestsAction, statsAction] = await Promise.all([
-          requestsPromise,
-          statsPromise,
-        ]);
-
-        await notificationsPromise;
-
-        if (fetchPurchaseRequests.rejected.match(requestsAction)) {
-          throw new Error(
-            typeof requestsAction.payload === "string"
-              ? requestsAction.payload
-              : "Failed to load purchase requests."
-          );
-        }
-
-        if (fetchDashboardStats.rejected.match(statsAction)) {
-          throw new Error(
-            typeof statsAction.payload === "string"
-              ? statsAction.payload
-              : "Failed to load dashboard statistics."
-          );
-        }
-      } catch (error) {
-        setDashboardError(
-          error instanceof Error
-            ? error.message
-            : "Something went wrong while loading the dashboard."
+      if (fetchPurchaseRequests.rejected.match(requestsAction)) {
+        throw new Error(
+          typeof requestsAction.payload === "string"
+            ? requestsAction.payload
+            : "Failed to load purchase requests."
         );
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
       }
-    },
-    [dispatch]
-  );
 
-  useEffect(() => {
-    void loadDashboard();
-  }, [loadDashboard]);
+      if (fetchDashboardStats.rejected.match(statsAction)) {
+        throw new Error(
+          typeof statsAction.payload === "string"
+            ? statsAction.payload
+            : "Failed to load dashboard statistics."
+        );
+      }
+
+      if (fetchNotifications.rejected.match(notificationsAction)) {
+        throw new Error(
+          typeof notificationsAction.payload === "string"
+            ? notificationsAction.payload
+            : "Failed to load notifications."
+        );
+      }
+    } catch (error) {
+      setDashboardError(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong while loading the dashboard."
+      );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  },
+  [dispatch]
+);
+
+useEffect(() => {
+  void loadDashboard();
+}, [loadDashboard]);
 
   // Calculate purchase request totals
   const requestSummary = useMemo(() => {
@@ -428,6 +413,7 @@ export default function AdminDashboard() {
           className="fixed inset-0 z-30 bg-black/40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
+       
       )}
 
       {/* Sidebar */}

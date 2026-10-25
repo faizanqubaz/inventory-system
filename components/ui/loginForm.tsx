@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -7,18 +8,21 @@ import { useDispatch } from "react-redux";
 import type { AppDispatch } from "@/store/store";
 import { Login } from "@/thunk/login.thunk";
 import { useRouter } from "next/navigation";
+import { useAppSelector } from "@/store/hook";
 
 export default function LoginForm() {
   const router = useRouter();
   const dispatch = useDispatch<AppDispatch>();
 
+  // Get loading and error from Redux
+  const { isLoading, error } = useAppSelector(
+    (state:any) => state.auth
+  );
+
   const [form, setFormDetails] = useState({
     email: "",
     password: "",
   });
-
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -27,58 +31,49 @@ export default function LoginForm() {
       ...prev,
       [name]: value,
     }));
-
-    if (error) setError("");
   };
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (
+    e: React.FormEvent<HTMLFormElement>
+  ) => {
     e.preventDefault();
 
-    // Prevent duplicate requests.
-    if (loading) return;
-
-    setError("");
+    if (isLoading) return;
 
     if (!form.email.trim() || !form.password) {
-      setError("Please enter your email and password.");
       return;
     }
 
-    setLoading(true);
-
     try {
-      const response: any = await dispatch(Login(form)).unwrap();
+      const response = await dispatch(Login(form)).unwrap();
 
-      const { redirectTo, user } = response;
-      console.log('redirectTo',redirectTo)
-      console.log('user',user.role == "employee")
-      if (user.role == "employee" || user.role === "accountant") {
-        console.log('running')
-        router.push(
-          `${redirectTo}?${new URLSearchParams({
-            employeeId: user.id,
-          }).toString()}`
-        );
-      } else {
-        router.push(redirectTo);
-      }
+const { redirectTo, user } = response;
 
-    
-      if (!response.redirectTo) {
-        throw new Error("Login succeeded, but no dashboard was provided.");
-      }
+if (!redirectTo) {
+  throw new Error(
+    "Login succeeded, but no dashboard was provided."
+  );
+}
 
-      // router.push(response.redirectTo);
+// Validate user before accessing its properties
+if (!user) {
+  throw new Error("Login succeeded, but user data is missing.");
+}
+
+// Wait 2 seconds before redirecting
+await new Promise((resolve) => setTimeout(resolve, 2000));
+
+if (user.role === "employee" || user.role === "accountant") {
+  const params = new URLSearchParams({
+    employeeId: user.id,
+  });
+
+  router.push(`${redirectTo}?${params.toString()}`);
+} else {
+  router.push(redirectTo);
+}
     } catch (err) {
-      setError(
-        typeof err === "string"
-          ? err
-          : err instanceof Error
-            ? err.message
-            : "Unable to log in. Please check your credentials and try again."
-      );
-    } finally {
-      setLoading(false);
+      console.error("Login failed:", err);
     }
   };
 
@@ -132,13 +127,12 @@ export default function LoginForm() {
           Remember me
         </label>
 
-        <button
+        <MyButton
+          children="Forgot password?"
+          btncls="font-semibold text-green-700 transition hover:text-green-900"
           type="button"
-          onClick={() => router.push("/forgot-password")}
-          className="font-semibold text-green-700 transition hover:text-green-900"
-        >
-          Forgot password?
-        </button>
+          handleClick={() => router.push("/forget-password")}
+        />
       </div>
 
       {error && (
@@ -152,13 +146,12 @@ export default function LoginForm() {
 
       <button
         type="submit"
-        disabled={loading}
+        disabled={isLoading}
         className="group relative flex w-full items-center justify-center gap-3 overflow-hidden rounded-xl bg-gradient-to-r from-green-600 to-indigo-700 px-4 py-3.5 font-semibold text-white shadow-lg shadow-green-900/20 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-green-900/30 focus:outline-none focus:ring-4 focus:ring-green-600/20 disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0"
       >
-        {/* Sliding hover effect */}
         <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-indigo-600 via-emerald-400 to-green-500 transition-transform duration-500 ease-out group-hover:translate-x-0" />
 
-        {loading ? (
+        {isLoading ? (
           <>
             <span className="relative h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
             <span className="relative">Signing you in...</span>

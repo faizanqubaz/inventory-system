@@ -3,8 +3,6 @@
 import Image from "next/image";
 import office from '../../../public/images/office.jpg'
 import MyHeading from "@/components/common/heading";
-import MyInput from "@/components/common/input";
-import MyButton from "@/components/common/button";
 import LoginForm from "@/components/ui/loginForm";
 
 export default function LoginPage() {
