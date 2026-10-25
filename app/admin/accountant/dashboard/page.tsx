@@ -203,7 +203,7 @@ export default function AccountantDashboard() {
       setError("");
       setNotice("");
 
-      const response = await fetch(
+      const response: Response = await fetch(
         `/api/accountant/purchase-requests/${id}/payment`,
         {
           method: "PATCH",
